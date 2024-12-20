@@ -61,7 +61,7 @@
 
 					<div class="text-center">						
 						<a href="https://my.openathens.net/" class="txt2 hov1" target="_blank">
-							<span class="txt1">Login with OpenAthens Account</span>
+							<span class="txt1">TEST Login with OpenAthens Account</span>
 						</a>
 					</div>
 					
