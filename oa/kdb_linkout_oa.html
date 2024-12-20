@@ -1,0 +1,385 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Korean Database Resolver</title>
+<script type="text/javascript" src="https://widgets.ebscohost.com/prod/common/javascript/gss-common.js"></script>
+</head>
+
+<body>
+<script>
+
+var linkParam = new Array();
+var apiGWUrl	= "https://widgets.ebscohost.com/prod/encryptedkey/eds/eds.php?k=eyJjdCI6IlFVcGF5MWR4MVdZS2dCYnJVQWJ1QnRcL1RCTzF5cjBENW5vQkNjWFV1Tk1iQVUzQ0s2K1N0dXgwRHRaMFRVeHE1bzhNUkcrRGdaR3NYOGhRRFIzNjZLUT09IiwiaXYiOiI5OTljZmFlN2VmYWVlMzY5OGRjZTc1NWM1NzI2ODZkOSIsInMiOiIwOWVjZWYzZTZkNDdlNGY4In0=&p=c2VvbmdraW0ubWFpbi5lZHNhcGkta2Ri&s=0,1,1,0,0,0&q=search?";
+var apiGWParam	= "&searchmode=all&resultsperpage=10&pagenumber=1&sort=relevance&highlight=n&includefacets=n&view=title&autosuggest=n&autocorrect=n&includeimagequickview=n";
+var articleSearchCount = 0;
+
+//Get Parameter 수신
+var getParam = function(key){
+    var _parammap = {};
+	//console.log(document.location.search);
+	
+	linkParam = document.location.search.split("&");
+	
+	for (i=0; i < linkParam.length; i++) {
+		//console.log("linkParam"+i+": "+linkParam[i]);
+	}
+	
+    document.location.search.replace(/\??(?:([^=]+)=([^&]*)&?)/g, function () {
+        function decode(s) {
+            return decodeURIComponent(s.split("+").join(" "));
+        }
+
+        _parammap[decode(arguments[1])] = decode(arguments[2]);
+    });
+
+    return _parammap[key];
+};
+
+var aTitle		= getParam('atitle');
+var dbCode		= getParam('dbcode');
+var an		    = getParam('an');
+var issn		= getParam('ISSN');
+
+function keywordRemoval(keyword, status){
+    r_keyword = '';
+    
+    switch (status){
+        case "OnlyKorean":
+            if (keyword.indexOf(' / ') > 0){
+                //한글 및 영문 타이틀 복수 표기시, 영문 타이틀 제거(혼용 패턴 '/')
+                k_split = keyword.split(' / ');
+                for(var i=0; i<k_split.length; i++){
+                    if (hangulCheck(k_split[i])){
+                        r_keyword += k_split[i]
+                    }
+                }
+            }else{
+                r_keyword = keyword;
+            }
+            break;
+        case "MainTitle":
+            if (keyword.indexOf(':') > 0 || keyword.indexOf('-') > 0 || keyword.indexOf('―') > 0) {
+                k_split = keyword.split(/[:|-―-]/);
+                //split with : and -
+                if (k_split[0].indexOf(' ') > 0){
+                    r_keyword = k_split[0].trim();
+                }else{
+                    //키워드 분절시 단일 단어만 검색되지 않도록 보완(20210615)
+                    r_keyword = k_split[0] + ' ' + k_split[1];
+                }
+                r_keyword = r_keyword.replace("Covid 19","Covid-19");
+            }else{
+                r_keyword = keyword;
+            }
+            break;
+            
+        default :  
+            r_keyword = keyword;
+	}
+    
+    r_keyword = '"' + r_keyword + '"';
+    //console.log(r_keyword);
+    return r_keyword;
+}
+
+function hangulCheck(keyword){
+    //한글 체크 기능, Boolean
+    check = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/;
+    return check.test(keyword)
+}
+
+
+
+// Searching DBs with article title.
+function searchWithTitle(dbcode, aTitle) {
+	//alert("Title Search \nDBCODE:"+dbcode+"\nTitle:"+aTitle);
+	//Add function for re-use code in 'search_in_platform'
+    function insert_input(name, value){
+        var hiddenField = document.createElement("input");
+        hiddenField.setAttribute("type", "hidden");
+        hiddenField.setAttribute("name", name);
+        hiddenField.setAttribute("value", value);
+        
+        form.appendChild(hiddenField);
+    }
+    var form = document.createElement("form");
+    path = '';
+    method = '';
+    switch(dbcode) {
+      case "edspia":
+        path = "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fwww.dbpia.co.kr%2Fsearch%2FtopSearch";
+
+        method = "get";
+        insert_input("startCount", "0");
+        insert_input("collection", "ALL");
+        insert_input("range", "A");
+        insert_input("searchField", "ALL");
+        insert_input("sort", "RANK");
+        insert_input("query", aTitle);
+        //insert_input("collectionQuery", "<TITLE%3Acontains%3A" + aTitle + ">");
+        //modify - 2020.06.08 DBPIA Query 
+        insert_input("collectionQuery", "<NODE_NM_2:contains:"+ aTitle +"> | <TITLE:contains:"+aTitle+">");
+        insert_input("srchOption", "NODE_NM_2");
+
+        break;
+      case "edskis":
+        path = "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fkiss.kstudy.com%2FSearch%2FResult";
+        method = "get";
+        insert_input("query", aTitle);
+        insert_input("field", "0");
+        insert_input("isDetail", "N");
+        break;
+      case "edskyo":
+        //document.charset = "euc-kr";
+        path = "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fscholar.kyobobook.co.kr%2Fsearch%2Farticle%2FproductNm";
+        method = "get";
+        insert_input("keyword", aTitle);
+        break;
+      case "edsers":
+        path = "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fwww.earticle.net%2FSearch%2FResult";
+        method = "get";
+        insert_input("sf", 2);
+        insert_input("q", aTitle);
+        break;
+	case "edssks":
+        path = "https://go.openathens.net/redirector/hanyang.ac.kr?url=http%3A%2F%2Fdb.koreascholar.com%2FSearch%2FResult";
+        method = "get";        
+        insert_input("query", aTitle);
+        break;
+      default:
+        // code block
+    }
+    form.setAttribute("method", method);
+    form.setAttribute("action", path);
+    
+    document.body.appendChild(form);
+    form.submit();
+	//alert('해당 문서를 찾지 못하였습니다. 통합검색 관리자에게 문의 부탁드립니다.')
+	
+}
+
+// AN으로 조회하기
+function retrieveWithAn(dbcode, edsAn) {
+	//alert("AN Search \nDBCODE:"+dbcode+"\nAN:"+edsAn);
+	var targetUrl = "";
+	switch (dbcode){
+    case "edspia":
+        edsAn	= edsAn.substr(7);
+		//targetUrl	= "http://www.dbpia.co.kr/view/ar_view.asp?arid="+edsAn;
+        targetUrl   = "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fwww.dbpia.co.kr%2Fjournal%2FarticleDetail%3FnodeId%3D"+edsAn;
+        break;
+    case "edskis":
+        edsAn	= edsAn.substr(7);
+		targetUrl	= "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fkiss.kstudy.com%2FExternalLink%2FAr%3Fkey%3D"+edsAn;
+        break;
+    case "edsers":
+		edsAn	= edsAn.substr(7);
+        targetUrl	= "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fwww.earticle.net%2FArticle.aspx%3Fsn%3D"+edsAn;
+        break;
+    case "edskyo":
+        edsAn	= edsAn.substr(7);
+		targetUrl	= "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fscholar.kyobobook.co.kr%2Farticle%2Fdetail%2F"+edsAn;
+        break;
+    case "edssks":
+        edsAn	= edsAn.substr(7);
+		targetUrl	= "https://go.openathens.net/redirector/hanyang.ac.kr?url=http%3A%2F%2Fdb.koreascholar.com%2FArticle%3Fcode%3D"+edsAn;
+        break;	
+    default : 
+		targetUrl	= "https://go.openathens.net/redirector/hanyang.ac.kr?url=https%3A%2F%2Fsearch.ebscohost.com%2Flogin.aspx%3Fdirect%3Dtrue%26db%3D"+dbcode+"%26AN%3D"+edsAn+"%26site%3Deds-live";
+	}
+    console.log("Targeting to " + targetUrl)
+	location.href = targetUrl;
+}
+
+//Call EDS-API with keyword	
+function articleSearch(aTitle, dbCode){
+    articleSearchCount = articleSearchCount + 1;
+    console.log("검색시도 : " + articleSearchCount);
+	var cpString	= "&facetfilter=1,ContentProvider:";
+	var endUrl		= "";
+    aTitle = aTitle;
+	console.log("aTitle : "+aTitle);
+	if (aTitle == undefined){
+        aTitle	= getParam('atitle');
+    }
+	//aTitle	= aTitle.replace(/-/g," ");
+	aTitle	= aTitle.replace(/�62/g, " ");
+	aTitle	= aTitle.replace(/�63/g, " ");
+	//Year in the title have changed due to below replace.
+    //aTitle	= aTitle.replace(/15/g, " ");
+	//aTitle	= aTitle.replace(/18/g, " ");
+	//aTitle	= aTitle.replace(/19/g, " ");
+	//aTitle	= aTitle.replace(/14/g, " ");
+	aTitle	= aTitle.replace(/�0D/g, " ");
+	aTitle	= aTitle.replace(/00E/g, " ");
+	aTitle	= aTitle.replace(/00F/g, " ");
+	aTitle	= aTitle.replace(/�82�54/g, " ");
+	aTitle	= aTitle.replace(/�82�55/g, " ");
+	aTitle	= aTitle.replace(/&/g, " ");
+	aTitle	= aTitle.replace(/</g, " ");
+	aTitle	= aTitle.replace(/>/g, " ");
+	aTitle	= aTitle.replace(/#39;/g, " ");
+	
+    //Title exception.
+    if (an == 'edskci.ARTI.5494339'){
+        aTitle = aTitle.split('?')[0];
+    }
+    if (an == 'edskci.ARTI.9762417'){
+        aTitle = aTitle.replace('부당노동행위로성립하기','부당노동행위로 성립하기');
+    }
+    if (an == 'edskci.ARTI.9762417'){
+        aTitle = '문화복지로서의 지역문화진흥에 대한 소고';
+    }
+    if (an == 'edskci.ARTI.62379'){
+        aTitle = '行政立法에 대한 司法審査';
+    }
+	if (an == 'edskci.ARTI.1173411'){
+        aTitle = '출산장려세제의 실효성 검토와 개선방안';
+    }
+    
+	var qrString	= aTitle.replace(/,/g,"\\,");
+	qrString	= qrString.replace(/:/g,"\\:");
+	//qrString	= qrString.replace(/\(/g,"\\(");
+	//qrString	= qrString.replace(/\)/g,"\\)");
+	qrString	= qrString.replace(/\(/g," ");
+	qrString	= qrString.replace(/\)/g," ");
+	//qrString	= qrString.replace(/―/g," ");
+    //The escaping brackets are making no result. Disable it and changing brackets to a space
+	qrString	= "query-1=AND,TI:" + qrString;
+    
+    if (an == 'edskci.ARTI.449558'){
+        qrString	= "query-1=AND,AN:edspia.NODE01922152";
+    }
+    if (issn == '2733-4902'){
+        issn	= "2383-5230";
+    }
+    if (issn == '2733-6832'){
+        issn	= "1229-7992";
+    }
+    if (issn == '2733-4430'){
+        issn	= "2093-8667";
+    }
+    if (issn == '2671-776X'){
+        issn	= "1598-2106";
+    }
+    if (issn == '2733-9270'){
+        issn	= "1738-3323";
+    }
+
+    qrString    = qrString + "&query-2=AND,IS:" + issn;
+	//console.log("aTitle : "+aTitle);
+	console.log("qrString : "+qrString);
+	console.log("dbCode: "+dbCode);
+	
+	switch (dbCode){
+    case "edspia":
+        cpString += "DBPIA";
+        break;
+    case "edskis":
+        cpString += "Korean Studies Information Service System";
+        break;
+    case "edsers":
+        cpString += "eArticle";
+        break;
+    case "edskyo":
+        cpString += "스콜라\(Scholar\)";
+        break;
+    case "edssks":
+        cpString += "KoreaScholar";
+        break;
+	case "edskrp":
+        cpString += "KRpia";
+        break;
+    default :
+        cpString = "";
+	}
+	
+	//console.log("cpString: "+cpString);
+	endUrl	= apiGWUrl + encodeURIComponent(qrString) + encodeURIComponent(cpString) + encodeURIComponent(apiGWParam);
+	//console.log("endUrl: "+endUrl);
+	
+	$.ajax({ 
+		url: endUrl,		
+		type: "GET",
+		dataType: "json",
+		async: false,
+		cache: true,
+		success: function(json) {
+            if (json.SearchResult){
+                console.log("검색 건수: "+json.SearchResult.Statistics.TotalHits);
+                //console.log(typeof JSON.stringify(json), JSON.stringify(json));
+                if (json.SearchResult.Statistics.TotalHits > 0) {
+                    console.log("Access Number: "+json.SearchResult.Data['Records'][0].Header.An);
+                    var edsAn = json.SearchResult.Data['Records'][0].Header.An;
+                    //Get AN of first search result
+                    retrieveWithAn(dbCode, edsAn);
+                    //Get URL based on dbCode from link-in URL and AN from search result                }
+                }else if (articleSearchCount == 1) {
+                    get_altertitle_search(an);
+                    //When no search result based on Korean title, get english title from EDSKCI(with EDSKCI AN) and perform the search again.
+                }else if (articleSearchCount == 2){
+                    aTitle	= getParam('atitle');
+                    mainT = keywordRemoval(aTitle, 'MainTitle');
+                    articleSearch(mainT, dbCode);
+                    //When no search result with En title, split the Korean title to small pieces and perform search.
+                }else{
+                    console.log("No result in EDS-API perform search in Platform");
+                    aTitle = aTitle.substr(1,aTitle.length-2);
+                    //aTitle is quoatated at keywordRemoval function
+                    searchWithTitle(dbCode, aTitle);
+                }
+            }
+		},
+		error: function(request,status,error) {
+			alert("code: "+request.status+"\nmessage: "+request.responseText+"\nerror:"+error);
+			searchWithTitle(dbCode, aTitle);
+		},
+		complete: function() {
+			//alert("complete!");
+		}		
+	});
+}
+    
+function get_altertitle_search(an){
+    dbid = 'dbid=edskci';
+    an = '&an=' + an;
+    endUrl	= apiGWUrl.replace('q=search?','q=retrieve?') + encodeURIComponent(dbid) + encodeURIComponent(an);
+	console.log("get_altertitle_search endUrl: "+ endUrl);
+    $.ajax({ 
+		url: endUrl,		
+		type: "GET",
+		dataType: "json",
+		async: false,
+		cache: true,
+		success: function(json) {
+			if (json.Record.Items[0]) {
+                var both_title = json.Record.Items[0].Data
+                //EDSKCI specific - the title is indexed with Ko/En seperation with 'br /&gt;'
+                if (both_title.indexOf("/&gt;")) {
+                    var en_title = both_title.split("/&gt;")[1]
+                    articleSearch(en_title, dbCode);
+                }
+            	else {
+                    articleSearch(both_title, dbCode);
+			     }
+			}else{
+                articleSearch(aTitle, dbCode);
+            }
+		},
+		error: function(request,status,error) {
+			alert("code: "+request.status+"\nmessage: "+request.responseText+"\nerror:"+error);
+			searchWithTitle(dbCode, aTitle);
+		},
+		complete: function() {
+			//alert("complete!");
+		}		
+	});
+}
+
+    
+articleSearch(aTitle, dbCode);
+</script>
+
+</body>
+</html>
